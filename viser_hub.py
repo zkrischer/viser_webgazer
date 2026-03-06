@@ -227,6 +227,22 @@ class ViserHub:
                             'rotation': camera.wxyz, 
                         })
 
+            @self.client.gaze.on_update
+            def _(gaze: viser.GazeHandle) -> None:
+                if self.shutdown is True:
+                    return
+                if not self.gaze_enabled:
+                    return
+                if self.current_scene_name is None:
+                    return
+
+                current_scene_time = time.time() - self.scene_start_time
+                if current_scene_time - self.last_gaze_record < self.GAZE_DT:
+                    return
+
+                self.last_gaze_record = current_scene_time
+                self.gaze_positions.append((gaze.x, gaze.y, current_scene_time))
+
         @self.server.on_client_disconnect
         def _(client: viser.ClientHandle) -> None:
             self.client = None
