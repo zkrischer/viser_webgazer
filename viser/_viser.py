@@ -413,6 +413,68 @@ class CameraHandle:
         )
 
 
+@dataclasses.dataclass
+class _GazeHandleState:
+    """Information about the latest gaze sample from a client."""
+
+    client: ClientHandle
+    x: float
+    y: float
+    timestamp: float
+    update_timestamp: float
+    gaze_cb: list[Callable[[GazeHandle], None | Coroutine]]
+
+
+class GazeHandle:
+    """A handle for reading gaze samples for a particular client.
+
+    Typically accessed via :attr:`ClientHandle.gaze`.
+    """
+
+    def __init__(self, client: ClientHandle) -> None:
+        self._state = _GazeHandleState(
+            client=client,
+            x=0.5,
+            y=0.5,
+            timestamp=0.0,
+            update_timestamp=0.0,
+            gaze_cb=[],
+        )
+
+    @property
+    def client(self) -> ClientHandle:
+        return self._state.client
+
+    @property
+    def xy(self) -> tuple[float, float]:
+        return (self._state.x, self._state.y)
+
+    @property
+    def x(self) -> float:
+        return self._state.x
+
+    @property
+    def y(self) -> float:
+        return self._state.y
+
+    @property
+    def timestamp(self) -> float:
+        """Frontend-provided gaze timestamp in seconds."""
+        return self._state.timestamp
+
+    @property
+    def update_timestamp(self) -> float:
+        """Python wall-clock timestamp when the last sample was received."""
+        return self._state.update_timestamp
+
+    def on_update(
+        self, callback: Callable[[GazeHandle], NoneOrCoroutine]
+    ) -> Callable[[GazeHandle], NoneOrCoroutine]:
+        """Attach a callback to run when a new gaze sample is received."""
+        self._state.gaze_cb.append(callback)
+        return callback
+
+
 NoneOrCoroutine = TypeVar("NoneOrCoroutine", None, Coroutine)
 
 
@@ -451,6 +513,8 @@ class ClientHandle(DeprecatedAttributeShim if not TYPE_CHECKING else object):
         """Unique ID for this client."""
         self.camera: CameraHandle = CameraHandle(self)
         """Handle for reading from and manipulating the client's viewport camera."""
+        self.gaze: GazeHandle = GazeHandle(self)
+        """Handle for reading gaze samples streamed from the frontend."""
 
     def flush(self) -> None:
         """Flush the outgoing message buffer. Any buffered messages will immediately be
@@ -817,6 +881,30 @@ class ViserServer(DeprecatedAttributeShim if not TYPE_CHECKING else object):
                         ).add_done_callback(print_threadpool_errors)
 
             conn.register_handler(_messages.ViewerCameraMessage, handle_camera_message)
+
+            async def handle_gaze_message(
+                client_id: infra.ClientId, message: _messages.ViewerGazeMessage
+            ) -> None:
+                assert client_id == client.client_id
+
+                client.gaze._state = _GazeHandleState(
+                    client=client,
+                    x=message.x,
+                    y=message.y,
+                    timestamp=message.timestamp,
+                    update_timestamp=time.time(),
+                    gaze_cb=client.gaze._state.gaze_cb,
+                )
+
+                for gaze_cb in client.gaze._state.gaze_cb:
+                    if asyncio.iscoroutinefunction(gaze_cb):
+                        await gaze_cb(client.gaze)
+                    else:
+                        self._thread_executor.submit(
+                            gaze_cb, client.gaze
+                        ).add_done_callback(print_threadpool_errors)
+
+            conn.register_handler(_messages.ViewerGazeMessage, handle_gaze_message)
 
         # Remove clients when they disconnect.
         @server.on_client_disconnect

@@ -205,6 +205,19 @@ class ViewerCameraMessage(Message):
     up_direction: Tuple[float, float, float]
 
 
+@dataclasses.dataclass
+class ViewerGazeMessage(Message):
+    """Message for a normalized gaze sample in viewer coordinates.
+
+    `x` and `y` are normalized to [0, 1], with (0, 0) at the top-left
+    and (1, 1) at the bottom-right of the viewer canvas.
+    """
+
+    x: float
+    y: float
+    timestamp: float
+
+
 # The list of scene pointer events supported by the viser frontend.
 ScenePointerEventType = Literal["click", "rect-select"]
 

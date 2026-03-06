@@ -52,6 +52,7 @@ import { MacWindowWrapper } from "./MacWindowWrapper";
 import { CsmDirectionalLight } from "./CsmDirectionalLight";
 import { VISER_VERSION, GITHUB_CONTRIBUTORS, Contributor } from "./VersionInfo";
 import { BatchedLabelManager } from "./BatchedLabelManager";
+import { GazeTracker } from "./GazeTracker";
 
 // Import logo as asset for proper bundling/inlining.
 import logoSvg from "./assets/logo.svg";
@@ -319,6 +320,7 @@ function ViewerRoot() {
     <ViewerContext.Provider value={viewer}>
       <ViewerContents>
         {messageSource === "websocket" && <WebsocketMessageProducer />}
+        {messageSource === "websocket" && <GazeTracker />}
         {messageSource === "file_playback" && (
           <PlaybackFromFile fileUrl={playbackPath!} />
         )}
